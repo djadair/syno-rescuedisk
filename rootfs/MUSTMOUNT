@@ -1,0 +1,14 @@
+You must format and mount a drive here.
+
+DO NOT attempt to use a local directory or the install
+may overwrite your local system and render it un-bootable.
+
+The following partitions are required in a gpt formatted drive:
+
+type               size    Label            Mountpint
+grub-bios          512k    none             none
+fat32              100M    EFI-SYSTEM       rootfs/boot/efi
+ext4               5G+     USB_ROOT         rootfs
+swap               2G      USB_SWAP         none
+btrfs             max      USB_DATA         none
+

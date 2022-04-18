@@ -1,0 +1,96 @@
+btrfs filesystem label /dev/sdb USB_BTRFS_DATA
+e2label /dev/sdc1  USB_ROOT
+
+
+Labels are not re-loaded without change event
+echo "change" > /sys/block/sdc/sdc1/uevent
+
+
+Need to chmod / delete
+rootfs/etc/apt/trusted.gpg.d/multistrap.gpg
+rootfs/etc/apt/trusted.gpg.d/trustdb.gpg
+
+devvm@ubuntu:~$ sudo gparted
+root@ubuntu:/devel# mount /dev/sdc2 rootfs
+root@ubuntu:/devel# mkdir --parents rootfs/boot/efi
+root@ubuntu:/devel# mount /dev/sdc1 rootfs/boot/efi
+
+
+
+Install scripts
+/var/lib/dpkg/info
+
+Debconf preseed info
+
+locales	locales/locales_to_be_generated	multiselect	en_US.UTF-8 UTF-8
+locales	locales/default_environment_locale	select	en_US.UTF-8
+
+tzdata	tzdata/Zones/Etc	select	UTC
+tzdata	tzdata/Areas	select	America
+tzdata	tzdata/Zones/America	select	Phoenix
+
+update-rc.d mountkernfs.sh         defaults >/dev/null
+update-rc.d urandom                defaults 
+
+
+
+Cleanup :
+echo "nameserver 192.168.2.100" > /etc/resolv.conf
+27  apt update
+   28  apt install grub-efi-amd64-bin
+   29  passwd
+   31  adduser devvm
+   34  usermod -a -G sudo devvm
+root@ubuntu:/# grub-install --removable --target=x86_64-efi --efi-directory /boot/efi --bootloader-id=Ubuntu
+Installing for x86_64-efi platform.
+
+# Should not be needed with systemd-networkd working.
+cp /etc/resolv.conf rootfs/run/resolvconf/resolv.conf
+
+useradd -R /devel/rootfs/ -m -G sudo devvm
+passwd -R /devel/rootfs/
+passwd -R /devel/rootfs/ devvm
+
+
+# stuff installed
+
+For basic operation
+Commandline: apt install openssh-server
+Commandline: apt install lsscsi
+Commandline: apt install btrfs-tools
+Commandline: apt-get install nfs-common
+Commandline: apt install ecryptfs-utils
+Commandline: apt install scsitools
+
+Utility stuff ( not part of image gen )
+Commandline: apt install kexec-tools
+Commandline: apt install emacs
+
+For VMWare resizable desktop
+Commandline: apt install open-vm-tools
+
+To get VNC to work use xrdp and swap to mate desktop.
+Note:  clipboard requires vncconfig.
+Note:  clipboard crashes rdp connection.  Use it to log in and create a session
+       then close and connect with realvnc
+Commandline: apt install xrdp
+Commandline: apt install mate-core mate-desktop-environment mate-notification-daemon
+Commandline: apt install gnome-icon-theme
+
+For image creation
+Commandline: apt install multistrap
+Commandline: apt install debconf-utils
+Commandline: apt install gparted
+
+
+Useless stuff -- 
+Commandline: apt install debootstrap  ( all manual, one repo )
+Commandline: apt install system-config-kickstart ( creates kickstarts but no lorax to use them )
+Commandline: apt install ubiquity  ( too complicated )
+Commandline: apt install ubiquity-frontend-gtk
+Commandline: apt install debian-installer ( docs and a library )
+Commandline: apt-get install debian-installer-launcher
+Commandline: apt install pydb  ( wanted perl not python )
+Commandline: apt install dh-di  ( doc for debian-installer preseeds )
+
+

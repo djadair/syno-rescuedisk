@@ -1,0 +1,11 @@
+# No backup files
+#*
+*~
+# No object files
+*.o
+*.dep
+# No logs
+*.log
+# Skip rootfs
+/rootfs/**
+!/rootfs/MUSTMOUNT

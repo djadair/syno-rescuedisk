@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#
+# Mount required stuff and chroot to shell.
+#
+
+if [ ! -d "$1" ] ; then
+    echo "Must specify root dir"
+fi
+
+mount -o bind /dev ${1}/dev
+mount -t proc proc ${1}/proc
+mount -t sysfs sys ${1}/sys
+
+chroot $1
+
+umount ${1}/dev
+umount ${1}/proc
+umount ${1}/sys
