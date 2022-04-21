@@ -94,3 +94,13 @@ Commandline: apt install pydb  ( wanted perl not python )
 Commandline: apt install dh-di  ( doc for debian-installer preseeds )
 
 
+# after host install required two changes:
+sudo sudo usermod -a -G ssl-cert xrdp
+sudo usermod -a -G ssl-cert xrdp
+echo "mate-session" > ~/.xsession
+
+and a couple reboots.
+also
+vncpasswd
+After starting remote desktop session
+vncpasswd -f ~/.vnc/sesman_devvm_passwd\:10

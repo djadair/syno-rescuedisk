@@ -24,7 +24,6 @@ use File::Basename;
 use Parse::Debian::Packages;
 use POSIX qw(locale_h);
 use Locale::gettext;
-use File::Copy;
 
 use vars qw/ $progname $ourversion $dstrap $extra @aptsources
  $deb $cachedir $config_str %packages $retval $str $retries
@@ -37,7 +36,7 @@ use vars qw/ $progname $ourversion $dstrap $extra @aptsources
  $explicit_suite $allow_recommends %omitdebsrc @dsclist @sectoutput
  %flatfile %important $addimportant @debconf $hookdir %hooks
  $warn_count $use_shortcut @foreignarches $olddpkg $ignorenative
- %foreignpkgs $markauto $default_release $pre_config_str/;
+ %foreignpkgs $markauto $default_release /;
 
 setlocale(LC_MESSAGES, "");
 textdomain("multistrap");
@@ -159,18 +158,18 @@ if ($dir =~ /^$/) {
 &mkdir_fatal ($dir);
 $dir = realpath ($dir);
 $dir .= ($dir =~ m:/$:) ? '' : "/";
-system_fatal ("mkdir -p " . shellescape("${dir}${cachedir}")) if (not -d "${dir}${cachedir}");
-system_fatal ("mkdir -p " . shellescape("${dir}${libdir}")) if (not -d "${dir}${libdir}");
-system_fatal ("mkdir -p " . shellescape("${dir}${dpkgdir}")) if (not -d "${dir}${dpkgdir}");
-system_fatal ("mkdir -p " . shellescape("${dir}etc/apt/sources.list.d/"))
+system_fatal ("mkdir -p ${dir}${cachedir}") if (not -d "${dir}${cachedir}");
+system_fatal ("mkdir -p ${dir}${libdir}") if (not -d "${dir}${libdir}");
+system_fatal ("mkdir -p ${dir}${dpkgdir}") if (not -d "${dir}${dpkgdir}");
+system_fatal ("mkdir -p ${dir}etc/apt/sources.list.d/")
 	if (not -d "${dir}etc/apt/sources.list.d/");
-system_fatal ("mkdir -p " . shellescape("${dir}etc/apt/trusted.gpg.d/"))
+system_fatal ("mkdir -p ${dir}etc/apt/trusted.gpg.d/")
 	if (not -d "${dir}etc/apt/trusted.gpg.d/");
-system_fatal ("mkdir -p " . shellescape("${dir}etc/apt/preferences.d/"))
+system_fatal ("mkdir -p ${dir}etc/apt/preferences.d/")
 	if (not -d "${dir}etc/apt/preferences.d/");
-system_fatal ("mkdir -p " . shellescape("${dir}usr/share/info/"))
+system_fatal ("mkdir -p ${dir}usr/share/info/")
 	if (not -d "${dir}usr/share/info/");
-system_fatal ("touch " . shellescape("${dir}usr/share/info/dir"));
+system_fatal ("touch ${dir}usr/share/info/dir");
 if (defined $preffile) {
 	open (PREF, "$preffile") or die ("$progname: $preffile $!");
 	my @prefs=<PREF>;
@@ -202,17 +201,27 @@ if (not -d "${dir}dev") {
 	mkdir_fatal ("${dir}dev");
 }
 if (($olddpkg == 0) and (scalar (@foreignarches) > 0)) {
-	open (VMA, ">${dir}${dpkgdir}arch");
-	print VMA "$host\n";
-	foreach my $farch (@foreignarches) {
-		print VMA "$farch\n";
+	if (not -d "${dir}etc/dpkg/dpkg.cfg.d/") {
+		system_fatal ("mkdir -p ${dir}etc/dpkg/dpkg.cfg.d/");
 	}
-	close (VMA);
+	if (not -f "${dir}etc/dpkg/dpkg.cfg.d/multiarch") {
+		open (MA, ">${dir}etc/dpkg/dpkg.cfg.d/multiarch");
+		foreach my $farch (@foreignarches) {
+			print MA "foreign-architecture $farch\n";
+		}
+		close (MA);
+		open (VMA, ">${dir}${dpkgdir}arch");
+		print VMA "$host\n";
+		foreach my $farch (@foreignarches) {
+			print VMA "$farch\n";
+		}
+		close (VMA);
+	}
 }
 
 &guard_lib64($dir);
 
-system_fatal ("rm -rf " . shellescape("${dir}etc/apt/sources.list.d") . "/*");
+system_fatal ("rm -rf ${dir}etc/apt/sources.list.d/*");
 unlink ("${dir}etc/apt/sources.list")
 	if (-f "${dir}etc/apt/sources.list");
 
@@ -231,9 +240,6 @@ foreach $repo (sort keys %suites) {
 	}
 	if (not -e "$dir/${cachedir}archives/partial") {
 		mkdir_fatal ("$dir/${cachedir}archives/partial");
-	}
-	if (not -e "${dir}${etcdir}apt.conf.d") {
-		mkdir_fatal ("${dir}${etcdir}apt.conf.d");
 	}
 }
 foreach my $aptsrc (@debootstrap) {
@@ -272,19 +278,26 @@ foreach my $pkg (values %keyrings) {
 	next if ("" eq "$pkg");
 	$k .= "$pkg ";
 }
-
-# dja: original failed if same key specified in multipe sections.
-chomp($k);
-my @ukeys = split (/ /, $k);
-uniq_sort (\@ukeys);
-$k = join (' ', @ukeys);
 if ((defined $k) and (not defined $noauth)) {
-	printf (_g("I: Downloading %s\n"), $k);
-	system ("apt-get -y download $k");
-	foreach my $keyring_pkg ( @ukeys ) {
+	# the keyring package must be available to the external apt
+	# and apt refuses to allow fakeroot to do this.
+	$str = "";
+	if (not exists $ENV{FAKEROOTKEY}) {
+		if ((exists $ENV{USER}) and ($ENV{USER} ne "root")) {
+			$str = "sudo" if (-f "/usr/bin/sudo");
+		}
+	} else {
+		print "Turning off SecureApt due to use of fakeroot\n";
+		$noauth++;
+	}
+}
+if ((defined $k) and (not defined $noauth)) {
+	printf (_g("I: Installing %s\n"), $k);
+	system ("$str apt-get -y -d --reinstall install $k");
+	foreach my $keyring_pkg (values %keyrings) {
 		next if (not defined $keyring_pkg);
 		my @files=();
-		my $file = `find ./ -name "${keyring_pkg}_*_all.deb"|grep -m1 $keyring_pkg`;
+		my $file = `find /var/cache/apt/archives/ -name "$keyring_pkg*"|grep -m1 $keyring_pkg`;
 		chomp ($file);
 		if ($file eq "") {
 			my $msg = sprintf (_g("Unable to download keyring package: '%s'"),$dir);
@@ -300,53 +313,46 @@ if ((defined $k) and (not defined $noauth)) {
 		}
 		foreach my $gpg (@files) {
 			next if ($gpg =~ /removed/);
-			File::Copy::copy "${xdir}/usr/share/keyrings/${gpg}", "${dir}${etcdir}trusted.gpg.d/";
+			$retval = system ("gpg --no-default-keyring ".
+				"--homedir=${dir}/etc/apt/trusted.gpg.d/ ".
+				"--keyring=multistrap.gpg ".
+				" --import ${xdir}/usr/share/keyrings/${gpg} 2>/dev/null");
+			$retval >>= 8;
+			die (_g("Secure Apt handling failed - try without authentication."))
+				if ($retval != 0);
 		}
 		system ("rm -rf ${xdir}");
-		unlink ($file);
+	}
+	if (-f "${dir}/etc/apt/trusted.gpg.d/multistrap.gpg") {
+		system_fatal ("cp ${dir}/etc/apt/trusted.gpg.d/multistrap.gpg ${dir}/etc/apt/trusted.gpg.d/trustdb.gpg");
+	} else {
+		die (_g("Secure Apt handling failed - try without authentication.")."\n");
 	}
 }
-
-$pre_config_str = '';
-$pre_config_str .= "Dir::Etc \"${dir}${etcdir}\";\n";
-$pre_config_str .= "Dir::Etc::Parts \"${dir}${etcdir}apt.conf.d/\";\n";
-$pre_config_str .= "Dir::Etc::PreferencesParts \"${dir}${etcdir}preferences.d/\";\n";
-
-my $tmp_apt_conf = `mktemp -t multistrap.XXXXXX`;
-chomp ($tmp_apt_conf);
-
-open CONFIG, ">$tmp_apt_conf";
-print CONFIG $pre_config_str;
-close CONFIG;
-
 $config_str = '';
-$config_str .= " -o Apt::Architecture=" . shellescape($arch);
-$config_str .= " -o Dir::Etc::TrustedParts=" . shellescape("${dir}${etcdir}trusted.gpg.d");
-$config_str .= " -o Dir::Etc::Trusted=" . shellescape("${dir}${etcdir}trusted.gpg");
+$config_str .= " -o Apt::Architecture=$arch";
+$config_str .= " -o Dir::Etc::TrustedParts=${dir}${etcdir}trusted.gpg.d";
+$config_str .= " -o Dir::Etc::Trusted=${dir}${etcdir}trusted.gpg";
 $config_str .= " -o Apt::Get::AllowUnauthenticated=true"
 	if (defined $noauth);
 $config_str .= " -o Apt::Get::Download-Only=true";
 $config_str .= " -o Apt::Install-Recommends=false"
 	if (not defined $allow_recommends);
-$config_str .= " -o Dir=" . shellescape($dir);
-$config_str .= " -o Dir::Etc=" . shellescape("${dir}${etcdir}");
-$config_str .= " -o Dir::Etc::Parts=" . shellescape("${dir}${etcdir}apt.conf.d/");
-$config_str .= " -o Dir::Etc::PreferencesParts=" . shellescape("${dir}${etcdir}preferences.d/");
-$config_str .= " -o APT::Default-Release=" . shellescape($default_release);
+$config_str .= " -o Dir=$dir";
+$config_str .= " -o Dir::Etc=${dir}${etcdir}";
+$config_str .= " -o Dir::Etc::Parts=${dir}${etcdir}apt.conf.d/";
+$config_str .= " -o Dir::Etc::PreferencesParts=${dir}${etcdir}preferences.d/";
+$config_str .= " -o APT::Default-Release=$default_release";
 #	if (not defined $preffile);
 if (defined $deflist) {
 	$sourcesname = "sources.list.d/multistrap.sources.list";
-	$config_str .= " -o Dir::Etc::SourceList=" . shellescape("${dir}${etcdir}$sourcesname");
+	$config_str .= " -o Dir::Etc::SourceList=${dir}${etcdir}$sourcesname";
 }
-$config_str .= " -o Dir::State=" . shellescape("${dir}${libdir}");
-$config_str .= " -o Dir::State::Status=" . shellescape("${dir}${dpkgdir}status");
-$config_str .= " -o Dir::Cache=" . shellescape("${dir}${cachedir}");
-
-my $apt_get = "APT_CONFIG=" . shellescape($tmp_apt_conf) . " apt-get $config_str";
-my $apt_mark = "APT_CONFIG=" . shellescape($tmp_apt_conf) . " apt-mark $config_str";
-printf (_g("Getting package lists: %s update\n"), $apt_get);
-
-$retval = system ("$apt_get update");
+$config_str .= " -o Dir::State=${dir}${libdir}";
+$config_str .= " -o Dir::State::Status=${dir}${dpkgdir}status";
+$config_str .= " -o Dir::Cache=${dir}${cachedir}";
+printf (_g("Getting package lists: apt-get %s update\n"), $config_str);
+$retval = system ("apt-get $config_str update");
 $retval >>= 8;
 die (sprintf (_g("apt update failed. Exit value: %d\n"), $retval))
 	if ($retval != 0);
@@ -391,18 +397,18 @@ chomp($str);
 @s = split (/ /, $str);
 uniq_sort (\@s);
 $str = join (' ', @s);
-print "$apt_get -y install $str\n";
+print "apt-get -y $config_str install $str\n";
 $retval = 0;
-$retval = system ("$apt_get -y install $str");
+$retval = system ("apt-get -y $config_str install $str");
 $retval >>= 8;
 die (sprintf (_g("apt download failed. Exit value: %d\n"),$retval))
 	if ($retval != 0);
 &force_unpack if ($unpack eq "true");
 &mark_manual_install ($str) if (defined $markauto);
-system ("touch " . shellescape("${dir}${libdir}lists/lock"));
+system ("touch ${dir}${libdir}lists/lock");
 if ((defined $setupsh) and (-x $setupsh)) {
 	$retval = 0;
-	$retval = system (shellescape($setupsh) . " " . shellescape($dir) . " $arch");
+	$retval = system ("$setupsh $dir $arch");
 	$retval >>= 8;
 	if ($retval != 0) {
 		warn sprintf(_g("setupscript '%s' returned %d.\n"), $setupsh, $retval);
@@ -417,9 +423,9 @@ if (defined $err and $err != 0) {
 	$warn_count++;
 }
 &add_extra_packages;
-system ("cp " . shellescape($configsh) . " " . shellescape("$dir/")) if ((defined $configsh) and (-f $configsh));
+system ("cp $configsh $dir/") if ((defined $configsh) and (-f $configsh));
 &handle_source_packages;
-(not defined $tidy) ? system ("$apt_get update") : &tidy_apt;
+(not defined $tidy) ? system ("apt-get $config_str update") : &tidy_apt;
 &guard_lib64($dir);
 
 # cleanly separate the bootstrap sources from the final apt sources.
@@ -464,10 +470,9 @@ foreach my $aptsrc (@aptsources) {
 	}
 }
 # altered the sources, so get apt to update.
-(not defined $tidy) ? system ("$apt_get update") : &tidy_apt;
+(not defined $tidy) ? system ("apt-get $config_str update") : &tidy_apt;
 # run second set of hooks
 &run_completion_hooks(sort @{$hooks{'A'}}) if (defined ($hooks{'A'}));
-unlink $tmp_apt_conf;
 if (not defined $warn_count) {
 	printf (_g("\nMultistrap system installed successfully in %s.\n"), $dir);
 } else {
@@ -480,11 +485,11 @@ if (defined $tgzname) {
 	printf (_g("\nCompressing multistrap system in '%s' to a tarball called: '%s'.\n"), $dir, $tgzname);
 	chdir ("$dir");
 	unlink $tgzname if (-f $tgzname);
-	my $retval = system ("tar -czf " . shellescape("../$tgzname ."));
+	my $retval = system ("tar -czf ../$tgzname .");
 	$retval >>= 8;
 	if ($retval == 0) {
 		printf (_g("\nRemoving build directory: '%s'\n"), $dir);
-		system ("rm -rf " . shellescape($dir) . "/*");
+		system ("rm -rf $dir/*");
 	}
 	my $final_path=realpath ("$dir/../$tgzname");
 	if (not defined $warn_count) {
@@ -502,24 +507,6 @@ if (not defined $warn_count) {
 
 ######### sub routine start ##########
 
-# avoid dependency on String::ShellQuote by implementing the mechanism
-# from python's shlex.quote function
-sub shellescape {
-    my $string = shift;
-    if (length $string == 0) {
-	return "''";
-    }
-    # search for occurrences of characters that are not safe
-    # the 'a' regex modifier makes sure that \w only matches ASCII
-    if ($string !~ m/[^\w@\%+=:,.\/-]/a) {
-	return $string;
-    }
-    # wrap the string in single quotes and handle existing single quotes by
-    # putting them outside of the single-quoted string
-    $string =~ s/'/'"'"'/g;
-    return "'$string'";
-}
-
 sub our_version {
 	my $query = `dpkg-query -W -f='\${Version}' multistrap 2>/dev/null`;
 	($query ne "") ? return $query : return "2.1.15";
@@ -528,10 +515,10 @@ sub our_version {
 sub add_extra_packages {
 	if (scalar @extrapkgs > 0) {
 		$str = join (' ', @extrapkgs);
-		print "$apt_get -y install $str\n";
-		system ("$apt_get -y install $str");
+		print "apt-get -y $config_str install $str\n";
+		system ("apt-get -y $config_str install $str");
 		&force_unpack (@extrapkgs) if ($unpack eq "true");
-		system ("touch " . shellescape("${dir}${libdir}lists/lock"));
+		system ("touch ${dir}${libdir}lists/lock");
 		&native if (not defined ($foreign));
 	}
 }
@@ -544,14 +531,13 @@ sub mark_manual_install {
 	my @archives=grep(/.*\.deb$/, readdir DEBS);
 	closedir (DEBS);
 	my @all = map {
-		my $escaped_path = shellescape("${dir}${cachedir}archives/$_");
-		`LC_ALL=C dpkg -f $escaped_path Package`; 
+		`LC_ALL=C dpkg -f ${dir}${cachedir}archives/$_ Package`; 
 	} @archives; 
 	chomp (@all);
 	my @auto = grep {my $pkg = $_; ! grep /$pkg/, @manual} @all;
 	printf(ngettext ("Found %d package to mark.\n",
 		"Found %d packages to mark.\n", scalar @auto), scalar @auto);
-	system ("$apt_mark auto " . join (" ", sort @auto)) if (scalar @auto > 0);
+	system ("apt-mark $config_str auto " . join (" ", sort @auto)) if (scalar @auto > 0);
 	printf (_g("Marking automatically installed packages completed.\n"));
 }
 
@@ -575,20 +561,18 @@ sub force_unpack {
 	}
 	print _g("I: Calculating obsolete packages\n");
 	foreach $deb (sort @archives) {
-		my $escaped_path = shellescape("${dir}${cachedir}archives/$deb");
-		my $version = `LC_ALL=C dpkg -f $escaped_path Version`;
-		my $package = `LC_ALL=C dpkg -f $escaped_path Package`;
-		my $arch = `LC_ALL=C dpkg -f $escaped_path Architecture`;
+		my $version = `LC_ALL=C dpkg -f ${dir}${cachedir}archives/$deb Version`;
+		my $package = `LC_ALL=C dpkg -f ${dir}${cachedir}archives/$deb Package`;
 		chomp ($version);
 		chomp ($package);
 		if (exists $unpack{$package}) {
-			my $test=system("dpkg --compare-versions ". shellescape($unpack{$package.$arch}) . " '<<' " . shellescape($version));
+			my $test=system("dpkg --compare-versions $unpack{$package} '<<' $version");
 			$test >>= 8;
 			# unlink version in $unpack if 0
 			# unlink $deb (current one) if 1
 			if ($test == 0) {
 				my $old = $deb;
-				$old =~ s/$version/$unpack{$package.$arch}/;
+				$old =~ s/$version/$unpack{$package}/;
 				printf (_g("I: Removing %s\n"), $old);
 				unlink "${dir}${cachedir}archives/$old";
 				next;
@@ -597,7 +581,7 @@ sub force_unpack {
 				unlink "${dir}${cachedir}archives/$deb";
 			}
 		}
-		$unpack{$package.$arch}=$version;
+		$unpack{$package}=$version;
 	}
 	if (not @limits) {
 		open (LOCK, ">${dir}${libdir}lists/lock");
@@ -613,11 +597,10 @@ sub force_unpack {
 	printf (_g("Using directory %s for unpacking operations\n"), $dir);
 	foreach $deb (sort @archives) {
 		printf (_g("I: Extracting %s...\n"), $deb);
-		my $escaped_path = shellescape("./${cachedir}archives/$deb");
-		my $ver=`LC_ALL=C dpkg -f $escaped_path Version`;
-		my $pkg=`LC_ALL=C dpkg -f $escaped_path Package`;
-		my $src=`LC_ALL=C dpkg -f $escaped_path Source`;
-		my $multi=`LC_ALL=C dpkg -f $escaped_path Multi-Arch`;
+		my $ver=`LC_ALL=C dpkg -f ./${cachedir}archives/$deb Version`;
+		my $pkg=`LC_ALL=C dpkg -f ./${cachedir}archives/$deb Package`;
+		my $src=`LC_ALL=C dpkg -f ./${cachedir}archives/$deb Source`;
+		my $multi=`LC_ALL=C dpkg -f ./${cachedir}archives/$deb Multi-Arch`;
 		chomp ($ver);
 		chomp ($pkg);
 		chomp ($src);
@@ -648,9 +631,7 @@ sub force_unpack {
 		mkdir_fatal ("./tmp");
 		my $tmpdir = `mktemp -p ./tmp -d -t multistrap.XXXXXX`;
 		chomp ($tmpdir);
-		my $escaped_path1 = shellescape("./${cachedir}archives/$deb");
-		my $escaped_path2 = shellescape($dir);
-		my $datatar = `LC_ALL=C dpkg -X $escaped_path1 $escaped_path2`;
+		my $datatar = `LC_ALL=C dpkg -X ./${cachedir}archives/$deb ${dir}`;
 		my $exit = `echo $?`;
 		chomp ($exit);
 		if ($exit ne "0") {
@@ -735,7 +716,7 @@ sub run_download_hooks {
 	foreach my $hookscript (@hooks) {
 		# Translators: this is a single instance, naming the hook
 		printf (_g("I: Running post-download hook: '%s'\n"), basename($hookscript));
-		my $hookret = system (shellescape($hookscript) . " " . shellescape($dir));
+		my $hookret = system ("$hookscript $dir");
 		$hookret >>= 8;
 		if ($hookret != 0) {
 			printf (_g("I: post-download hook '%s' reported an error: %d\n"), basename($hookscript), $hookret);
@@ -753,7 +734,7 @@ sub run_native_hooks_start {
 	foreach my $hookscript (@hooks) {
 		# Translators: this is a single instance, naming the hook
 		printf (_g("I: Starting native hook: '%s'\n"), basename($hookscript));
-		my $hookret = system (shellescape($hookscript) . " " . shellescape($dir) . " start");
+		my $hookret = system ("$hookscript $dir start");
 		$hookret >>= 8;
 		if ($hookret != 0) {
 			printf (_g("I: run-native hook start '%s' reported an error: %d\n"), basename($hookscript), $hookret);
@@ -771,7 +752,7 @@ sub run_native_hooks_end {
 	foreach my $hookscript (@hooks) {
 		# Translators: this is a single instance, naming the hook
 		printf (_g("I: Stopping native hook: '%s'\n"), basename($hookscript));
-		my $hookret = system (shellescape($hookscript) . " " . shellescape($dir) . " end");
+		my $hookret = system ("$hookscript $dir end");
 		$hookret >>= 8;
 		if ($hookret != 0) {
 			printf (_g("I: run-native hook end '%s' reported an error: %d\n"), basename($hookscript), $hookret);
@@ -789,7 +770,7 @@ sub run_completion_hooks {
 	foreach my $hookscript (@hooks) {
 		# Translators: this is a single instance, naming the hook
 		printf (_g("I: Running post-configuration hook: '%s'\n"), basename($hookscript));
-		my $hookret = system (shellescape($hookscript) . " " . shellescape($dir));
+		my $hookret = system ("$hookscript $dir");
 		$hookret >>= 8;
 		if ($hookret != 0) {
 			printf (_g("I: run-completion hook '%s' reported an error: %d\n"), basename($hookscript), $hookret);
@@ -851,7 +832,7 @@ sub check_bin_sh {
 	}
 	if (-l "$dir/bin/sh") {
 		printf (_g("I: Shell found OK in %s:\n"), "${dir}bin/sh");
-		system ("(cd " . shellescape($dir) . " ; ls -lh bin/sh)");
+		system ("(cd $dir ; ls -lh bin/sh)");
 	} else {
 		die ("No shell in $dir.");
 	}
@@ -868,12 +849,11 @@ sub handle_source_packages {
 			next if (-d $file);
 			next unless ($file =~ /\.deb$/);
 			if (defined $sourcedir) {
-				my $escaped_path = shellescape("${dir}${cachedir}archives/$file");
-				my $srcname = `LC_ALL=C dpkg -f $escaped_path Source`;
+				my $srcname = `LC_ALL=C dpkg -f ${dir}${cachedir}archives/$file Source`;
 				chomp ($srcname);
 				$srcname =~ s/ \(.*\)//;
 				if ($srcname eq "") {
-					my $srcname = `LC_ALL=C dpkg -f $escaped_path Package`;
+					my $srcname = `LC_ALL=C dpkg -f ${dir}${cachedir}archives/$file Package`;
 					chomp ($srcname);
 				}
 				push @dsclist, $srcname;
@@ -909,9 +889,9 @@ sub handle_source_packages {
 	my $olddir = getcwd();
 	chdir ($sourcedir);
 	if (scalar @dsclist > 0) {
-		print "$apt_get -d source " . join (" ", @dsclist) . "\n";
+		print "apt-get -d $config_str source " . join (" ", @dsclist) . "\n";
 		foreach my $srcpkg (@dsclist) {
-			system ("$apt_get -d source $srcpkg");
+			system ("apt-get -d $config_str source $srcpkg");
 		}
 	}
 	chdir ($olddir);
@@ -928,7 +908,7 @@ sub tidy_apt {
 			next if (-d $file);
 			next unless ($file =~ /\.deb$/);
 			if (defined $sourcedir) {
-				system ("mv " . shellescape("${dir}${cachedir}archives/$file") . " " . shellescape("$sourcedir/$file"));
+				system ("mv ${dir}${cachedir}archives/$file $sourcedir/$file");
 			} else {
 				unlink ("${dir}${cachedir}archives/$file");
 			}
@@ -980,7 +960,7 @@ sub native {
 		closedir (SEEDS);
 		foreach my $s (@seeds) {
 			printf (_g("I: Running debconf for seed file: %s\n"), $s);
-			system ("$str $env chroot " . shellescape($dir) . " debconf-set-selections /tmp/preseeds/$s");
+			system ("$str $env chroot $dir debconf-set-selections /tmp/preseeds/$s");
 		}
 	}
 	&run_native_hooks_start(sort @{$hooks{'N'}}) if (defined ($hooks{'N'}));
@@ -995,21 +975,19 @@ sub native {
 			$t =~ s/\.preinst//;
 			next if ($t =~ /$f/);
 			next if ($script =~ /bash/);
-			# dja some scripts get mad without this
-			my $dp = "DPKG_MAINTSCRIPT_NAME=preinst DPKG_MAINTSCRIPT_PACKAGE=$t";
 			printf (_g("I: Running preinst %s.\n"), $script);
-			system ("$str $dp $env chroot " . shellescape($dir) . " /var/lib/dpkg/info/$script install");
+			system ("$str DPKG_MAINTSCRIPT_NAME=preinst DPKG_MAINTSCRIPT_PACKAGE=$t $env chroot $dir /var/lib/dpkg/info/$script install");
 		}
 	}
 	my $retval = 0;
-	$retval = system ("$str $env chroot " . shellescape($dir) . " dpkg --configure -a");
+	$retval = system ("$str $env chroot $dir dpkg --configure -a");
 	$retval >>=8;
 	if ($retval != 0) {
 		warn (_g("ERR: dpkg configure reported an error.\n"));
 	}
 	# reinstall set
 	foreach my $reinst (sort @reinstall) {
-		system ("$str $env chroot " . shellescape($dir) . " apt-get --reinstall -y install $reinst");
+		system ("$str $env chroot $dir apt-get --reinstall -y install $reinst");
 	}
 	&run_native_hooks_end(sort @{$hooks{'N'}}) if (defined $hooks{'N'});
 	return $retval;
@@ -1130,7 +1108,7 @@ bootstrap=Debian
 
 [Debian]
 packages=
-source=http://http.debian.net/debian
+source=http://cdn.debian.net/debian
 keyring=debian-archive-keyring
 suite=stable
 
@@ -1156,16 +1134,24 @@ sub cascade {
 	$olddpkg = &check_multiarch_dpkg;
 	$file = shift;
 	my @req_arches=();
+	my %newkeys=();
 	$config = Config::Auto::parse($file, format => 'ini');
 	if (not defined $config or (scalar keys %$config) == 0) {
 		die ("$progname: ". sprintf(_g("Failed to parse '%s'!\n"), $file));
 	}
 	foreach $key (%$config) {
-		$type = lc($key) if (ref $key ne "HASH");
-		$value = $key if (ref $key eq "HASH");
-		$keys{$type} = $value;
+	    if (ref $key ne "HASH") {
+		$type = lc($key)
+	    } else {
+		$value = $key;
+		# More specific config not overwritten by general
+		if (not exists $keys{$value}) {
+		    $keys{$type} = $value;
+		    $newkeys{$type} = $value;
+		}
+	    }
 	}
-	foreach $section (sort keys %keys) {
+	foreach $section (sort keys %newkeys) {
 		if ($section eq "general") {
 			$arch = $keys{$section}{'arch'}
 				if (defined $keys{$section}{'arch'} and (not defined $arch));
@@ -1175,9 +1161,9 @@ sub cascade {
 			$unpack = "false" if (defined $keys{$section}{'forceunpack'} and (lc($keys{$section}{'forceunpack'}) ne "true"));
 			$unpack = "false" if (defined $keys{$section}{'unpack'} and (lc($keys{$section}{'unpack'} ne "true")));
 			$markauto++ if ((defined $keys{$section}{'markauto'}) and (lc($keys{$section}{'markauto'}) eq "true"));
-			$configsh = $keys{$section}{'configscript'}
+			$configsh = lc($keys{$section}{'configscript'})
 				if (defined $keys{$section}{'configscript'} and (not defined $configsh));
-			$tgzname = $keys{$section}{'tarballname'}
+			$tgzname = lc($keys{$section}{'tarballname'})
 				if (defined $keys{$section}{'tarballname'} and (not defined $tgzname));
 			chomp($tgzname) if (defined $tgzname);
 			undef $tgzname if (defined $tgzname and $tgzname eq '');
@@ -1190,7 +1176,7 @@ sub cascade {
 				warn $configmsg;
 				$warn_count++;
 			}
-			$setupsh = $keys{$section}{'setupscript'}
+			$setupsh = lc($keys{$section}{'setupscript'})
 				if (defined $keys{$section}{'setupscript'} and (not defined $setupsh));
 			undef $setupsh if ((defined $setupsh) and (not -x $setupsh));
 			$omitrequired++ if (defined $keys{$section}{'omitrequired'} and (lc($keys{$section}{'omitrequired'}) eq "true"));
@@ -1200,7 +1186,7 @@ sub cascade {
 			$noauth++ if ((defined $keys{$section}{'noauth'}) and ($keys{$section}{'noauth'} eq "true"));
 			$ignorenative++ if ((defined $keys{$section}{'ignorenativearch'}) and
 				(lc($keys{$section}{'ignorenativearch'}) eq 'true'));
-			$preffile = $keys{$section}{'aptpreferences'}
+			$preffile = lc($keys{$section}{'aptpreferences'})
 				if (defined $keys{$section}{'aptpreferences'} and (not defined $preffile));
 			undef $preffile if ((defined $preffile) and (not -f $preffile));
 			$sourcedir = $keys{$section}{'retainsources'}
@@ -1209,9 +1195,9 @@ sub cascade {
 				($keys{$section}{'explicitsuite'} eq "true"));
 			$allow_recommends++ if ((defined $keys{$section}{'allowrecommends'}) and
 				($keys{$section}{'allowrecommends'} eq "true"));
-			$default_release = $keys{$section}{'aptdefaultrelease'}
+			$default_release = lc($keys{$section}{'aptdefaultrelease'})
 				if (defined $keys{$section}{'aptdefaultrelease'});
-			my @p = split(' ', $keys{$section}{'debconfseed'})
+			my @p = split(' ', lc($keys{$section}{'debconfseed'}))
 				if (defined $keys{$section}{'debconfseed'});
 			foreach my $f (@p) {
 				my $fl = realpath ($f);
@@ -1220,7 +1206,7 @@ sub cascade {
 				chomp ($fl);
 				push @debconf, $fl;
 			}
-			my @h = split(' ', $keys{$section}{'hookdir'})
+			my @h = split(' ', lc($keys{$section}{'hookdir'}))
 				if (defined $keys{$section}{'hookdir'});
 			foreach my $f (@h) {
 				opendir (HOOKS, "$f") or next;
@@ -1236,7 +1222,7 @@ sub cascade {
 			}
 			my @ma=();
 			if ($olddpkg == 0) {
-				@ma = split(' ',$keys{$section}{'multiarch'})
+				@ma = split(' ',lc($keys{$section}{'multiarch'}))
 					if (defined $keys{$section}{'multiarch'});
 				}
 			push @foreignarches, @ma;
@@ -1309,11 +1295,11 @@ sub cascade {
 				if (not exists $components{$section} and not exists $flatfile{$section});
 			$omitdebsrc{$section}=$section if ((defined $keys{$section}{'omitdebsrc'})
 				and ($keys{$section}{'omitdebsrc'} eq "true"));
-			push @reinstall, split (/ /, $keys{$section}{'reinstall'})
+			push @reinstall, split (/ /, lc($keys{$section}{'reinstall'}))
 				if (defined $keys{$section}{'reinstall'});
 			$components{$section}='main' if (not defined $components{$section});
 			$keyrings{$section}=$keys{$section}{'keyring'} if (not exists $keyrings{$section});
-			push @extrapkgs, split (' ', $keys{$section}{'additional'})
+			push @extrapkgs, split (' ', lc($keys{$section}{'additional'}))
 				if (defined $keys{$section}{'additional'});
 		}
 	}
@@ -1355,7 +1341,7 @@ sub system_fatal {
 sub mkdir_fatal {
 	my $d = shift;
 	if (not -d "$d") {
-		my $ret = system ("mkdir -p " . shellescape($d));
+		my $ret = system ("mkdir -p $d");
 		$ret >>= 8 if (defined $ret);
 		my $msg = sprintf (_g("Unable to create directory '%s'"),$d);
 		die "$progname: $msg\n" if ($ret != 0);

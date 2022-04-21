@@ -1,0 +1,50 @@
+#!/bin//bash
+
+if [ ! $1 = "install" ] ; then
+   echo "syntax: sudo $0 install"
+   echo
+   echo "This script will install all of the packages required"
+   echo "to run the usbrootfs generation."
+   echo
+   echo "It has been most recently tested on bionic [ 18.04 ] but"
+   echo "should still work on xenial [ 16.04 ] as well."
+   echo
+   echo "A slightly modified version of multistrap is required too"
+   echo "you can run the version in this directory or if you are ok"
+   echo "with unsigned packages install the deb in the fake-dist repo"
+   echo
+   echo "Note: fake-dist only works because multistrap is NOT included"
+   echo "in the target.  If you add it you will have to use --no-auth"
+   echo "or add noauth=true to the config."
+   echo
+   exit 0
+fi
+
+# to reach source repo.
+apt install ssh nfs-common git
+
+# For image creation
+apt install multistrap gparted debconf-utils
+apt install lsscsi
+apt install btrfs-tools
+apt install ecryptfs-utils
+apt install scsitools net-tools
+
+# Utility stuff ( not part of image gen )
+apt install kexec-tools
+apt install emacs
+
+# For VMWare resizable desktop
+apt install open-vm-tools
+
+# To get VNC to work use xrdp and swap to mate desktop.
+# Note:  clipboard requires vncconfig.
+# Note:  clipboard crashes rdp connection on xenial.  Use it to log in and
+#        create a session then close and connect with realvnc
+apt install xrdp vnc4server
+apt install mate-core mate-desktop-environment mate-notification-daemon
+apt install gnome-icon-theme
+
+
+# For dpkg creation ( also requires disabling apparmor on /usr/bin/man )
+apt install dpkg-dev debhelper intltool po4a apparmor-utils

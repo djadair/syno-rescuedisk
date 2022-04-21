@@ -39,7 +39,7 @@ find_efi() {
     dev=$(ls -d /sys/block/*/$rp 2>/dev/null) || return
     dev=$(basename $(dirname $dev) 2>/dev/null) || return
 
-    efi=(blkid -t LABEL="EFI-SYSTEM" | grep "/dev/$dev" | cut -f1 -d: | head -1)
+    efi=$(blkid -t LABEL="EFI-SYSTEM" | grep "/dev/$dev" | cut -f1 -d: | head -1)
     if [ -n "$efi" ] ; then
 	DISABLE_EFI=""
     fi
