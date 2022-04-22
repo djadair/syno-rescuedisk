@@ -1,0 +1,31 @@
+#!/bin/bash
+
+#
+# Mount required stuff and chroot to shell.
+#
+
+if [ ! -d "$1" ] ; then
+    echo "Must specify root dir"
+fi
+
+if [ ! $(id -u) -eq 0 ]; then
+    if ! sudo -v 2>/dev/null; then
+	echo "Sorry could not validate your credentials"
+	echo
+	echo "If this is an error edit the script to delete this check"
+	echo "and you will be prompted below."
+    fi
+    prefix="sudo "
+else
+    prefix=""
+fi
+
+${prefix}mount -o bind /dev ${1}/dev
+${prefix}mount -t proc proc ${1}/proc
+${prefix}mount -t sysfs sys ${1}/sys
+
+${prefix}chroot $1
+
+${prefix}umount ${1}/dev
+${prefix}umount ${1}/proc
+${prefix}umount ${1}/sys
