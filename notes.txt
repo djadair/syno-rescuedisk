@@ -104,3 +104,6 @@ also
 vncpasswd
 After starting remote desktop session
 vncpasswd -f ~/.vnc/sesman_devvm_passwd\:10
+
+Mounting encrypted volume from syno.  Requires copy or RW snapshot.
+mount -t ecryptfs -o ecryptfs_cipher=aes,ecryptfs_key_bytes=32,ecryptfs_passthrough=no
