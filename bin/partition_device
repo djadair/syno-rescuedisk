@@ -1,72 +1,35 @@
 
-# sfdisk does not allow long format partition definitions
-# without a valid "start=" which is a PITA to calculate.
-# Was broken on purpose and refused to fix hence this cruft.
-
-MB=$((1024 * 1024))
-GB=$((1024 * 1024 * 1024))
-KB=1024
-
-dev=/dev/sdb
-START=$((512 * KB))
-BIOS_SIZE=$((512 * KB))
-EFI_SIZE=$((33 * MB))
-SWAP_SIZE=$((1 * GB))
-ROOT_SIZE=$((2 * GB))
-
-
-
-sector_size=$(lsblk ${dev} -o LOG-Sec | awk -F" " 'FNR == 2 { print $1 }')
-sm1=$((sector_size -1))
-mbm1=$((MB -1))
-
-if ! [ x"${sector_size}" = "x512" -o x${sector_size} = "x4096" ] ; then
-    echo "Sector size $sector_size does not seem correct, aborting"
-    exit -1
+# Check for device size and choose large or small GPT
+dev=$1
+if [ -z "${dev}" ] ; then
+    echo "You must specify a device"
+    exit 1
+fi
+t=$( mount | grep $dev)
+if [ -n "$t" ] ; then
+    echo "$dev appears to be in use"
+    echo $t
+    fail "Can not partition active drive"
 fi
 
 
-sector() {
-    local t=$1
-    echo $(((t + sm1) / sector_size))
-}
+KB=1024
+MB=$((1024 * 1024))
+GB=$((1024 * 1024 * 1024))
 
-align_bytes() {
-    local t=$1
-    t=$(((t + mbm1) / MB))
-    echo $((t * MB))
-}
+# should read this from conf but....
+LARGE_REQUIRED=$((25 * GB))
 
-align_sector() {
-    local t=$1
-    t=$(align_bytes $((t * sector_size)))
-    echo $(sector $t)
-}
+DEV_SIZE=$(lsblk ${dev} -b -o SIZE | awk -F" " 'FNR == 2 { print $1 }')
+if [ -z "${DEV_SIZE}" ] ; then
+    echo "Could not find size for ${dev}"
+    exit 2
+fi
 
-start_sector=$(sector $START)
-start_size=$(sector $BIOS_SIZE)
-efi_sector=$((start_sector + start_size))
-efi_size=$(sector $EFI_SIZE)
-
-# align rest of partitions to 1MB
-swap_sector=$(align_sector $((efi_sector + efi_size)))
-swap_size=$(sector $SWAP_SIZE)
-
-root_sector=$(align_sector $((swap_sector + swap_size)))
-root_size=$(sector $ROOT_SIZE)
-
-data_sector=$(align_sector $((root_sector + root_size)))
-
-
-
-cat <<EOF
-label: gpt
-unit: sectors
-first-lba: ${start_sector}
-
-start= ${start_sector}, size=  ${bios_size},  type=21686148-6449-6E6F-744E-656564454649
-start= ${efi_sector},   size=  ${efi_size},   type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="EFI-System"
-start= ${swap_sector},  size=  ${swap_size},  type=S, name="USB_SWAP"
-start= ${root_sector},  size=  ${root_size},  type=L, name="USB_ROOT"
-start= ${data_sector},                        type=L, name="USB_DATA"
-EOF
+if (( DEV_SIZE > LARGE_REQUIRED )) ; then
+    echo "Using large drive formatting"
+    bin/sfconv.sh -f conf/gptlarge.conf -d ${dev} --yesdoit
+else
+    echo "Using small drive formatting"
+    bin/sfconv.sh -f conf/gptsmall.conf -d ${dev} --yesdoit
+fi

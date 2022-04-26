@@ -62,6 +62,10 @@ it as rootfs.  There is a suggested layout that you can create with:
 ```
 sudo bin/partition_device  /dev/<device>
 ```
+or using built in or your own sfdisk-like config file (see examples):
+```
+sudo bin/sfconv -f conf/<config> -d /dev/<device> --yesdoit
+```
 However partitioning is very personal -- you might want a much larger or much smaller
 system or may want other volumes on your device.  I suggest that you create your partitions
 manually with gparted.  At the very least examine the script and make sure it is what you
@@ -89,8 +93,8 @@ GPT partition layout
 | 5 | <opt> | Linux Filesystem (20) | USB_DATA | USB_BTRFS_DATA | btrfs |
 
 Choices:
-- Use 10-20GB for USB_ROOT to enable installation of full desktop.
-- Allocate all space to USB_ROOT to use as scratch space during recovery.
+- Use 10-20GB for USB_ROOT to enable installation of full desktop.  (`conf/gptlarge.conf`)
+- Allocate all space to USB_ROOT to use as scratch space during recovery. (`conf/gptsmall.conf`)
 - Create USB_DATA volume to use as a backup destination for synology.
 
 
@@ -117,7 +121,7 @@ or use boot partition and let root fill the drive
 | 2 | 2G | Linux Swap ( 19 ) | | USB_SWAP | USB_SWAP | swap |
 | 3 | -- | Linux Filesystem (20) | USB_ROOT | USB_ROOT | ext4 |
 
-
+(`conf/mbrboot.conf`)
 MBR does not require the two EFI partitions.  Do not create more than 3 primary partitions so
 that you have one spare to use as an extended partition table.
 
