@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # sfdisk does not allow long format partition definitions
 # without a valid "start=" which is a PITA to calculate.
@@ -120,7 +121,14 @@ if [ -n "$t" ] ; then
     fail "Can not partition active drive"
 fi
 
-[ -n "$(lsblk $a_dev | grep disk)" ] || fail "$a_dev must be whole disk"
+dtype=$(lsblk -o type $a_dev | awk -F" " 'FNR == 2 { print $1 }')
+[ "${dtype}" = "disk" ] || [ "${dtype}" = "loop" ] || fail "$a_dev must be whole disk"
+
+if [ "${dtype}" = "loop" ] ; then
+    if ! losetup $a_dev ; then
+	fail "$a_dev is loop but not loop dev"
+    fi
+fi	
 
 [ -z "${a_yesdoit}" -o $(id -u) -eq 0 ] || fail "sudo required to partition"
  
@@ -220,7 +228,25 @@ else
     sfdisk -w always -W always ${a_dev} < $pfile
     echo "waiting for new partitions"
     sleep 5
-    kpartx -s /dev/sdb
+    if [ "${dtype}" = "loop" ] ; then
+	# loop device requires teardown and re-create
+	img=$(losetup $a_dev | sed -e 's%[^(]*(\([^)]*\))%\1%')
+	[ -n "$img" ] || fail "Could not find loop image"
+	# This is a tough choice.  Dumb scripts are going
+	# to be flummoxed when we re-probe.  To avoid problems
+	# keep track of backing file and use losetup -j $img
+	# to find correct device after partitioning.
+	#
+	# Linux as of 4.15 does not provide any atomic way to
+	# probe a loop device for new partitions.
+	losetup -d $a_dev
+	if ! losetup -P --show $a_dev $img ; then
+	    echo "WARNING: Lost control of $a_dev"
+	    a_dev=$(losetup -P --show -f $img)
+	    echo "New device is : $a_dev"
+	fi
+    fi
+    kpartx -s ${a_dev}
 fi
 
 [ -n "${a_verbose}" ] || rm $pfile
@@ -231,8 +257,9 @@ if [ -z "$a_yesdoit" ] ; then
 fi
 
 # Check for FORMAT(), all partitions must have a type
-partno=1
+export partno=1
 cat ${a_conf} | grep "type=" | tr -d " " | while read line ; do
+    echo "formatting partition $partno"
     p=$(lsblk -l ${a_dev} | awk "FNR == $(( 2 + partno )) { print \$1 }")
     if [ -n "$p" ] ; then
 	partdev=/dev/${p}
@@ -248,7 +275,9 @@ cat ${a_conf} | grep "type=" | tr -d " " | while read line ; do
 	case $fs in
 	    "zero")
 		echo "Clearing $partdev"
-		dd if=/dev/zero of=$partdev 2>&1 >/dev/null
+		if [ -n "${a_yesdoit}" ] ; then
+		    dd if=/dev/zero of=$partdev 2>&1 >/dev/null
+		fi
 		;;
 
 	    "swap")

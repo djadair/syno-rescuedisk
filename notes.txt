@@ -135,3 +135,12 @@ E: Unable to locate package live-boot
 E: Unable to locate package live-boot-initramfs-tools
 
 
+in rootfs
+apt install syslinux syslinux-efi isolinux syslinux-utils
+
+1980  mkdir iso
+ 1981  cd iso
+ 1982  mkdir isolinux
+ 1983  cd isolinux/
+ 1984  cp ../../rootfs/usr/lib/syslinux/modules/bios/* .
+ 1985  cp ../../rootfs/usr/lib/ISOLINUX/isolinux.bin .

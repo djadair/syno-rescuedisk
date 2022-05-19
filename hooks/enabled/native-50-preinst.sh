@@ -1,0 +1,1 @@
+../all/native-50-preinst.sh

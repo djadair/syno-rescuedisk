@@ -4,9 +4,12 @@
 # Mount required stuff and chroot to shell.
 #
 
-if [ ! -d "$1" ] ; then
+root=$(readlink -f $1)
+
+if [ ! -d "$root" ] ; then
     echo "Must specify root dir"
 fi
+shift
 
 if [ ! $(id -u) -eq 0 ]; then
     if ! sudo -v 2>/dev/null; then
@@ -20,12 +23,14 @@ else
     prefix=""
 fi
 
-${prefix}mount -o bind /dev ${1}/dev
-${prefix}mount -t proc proc ${1}/proc
-${prefix}mount -t sysfs sys ${1}/sys
+${prefix}mount -o bind /dev ${root}/dev
+${prefix}mount -t devpts devpts ${root}/dev/pts
+${prefix}mount -t proc proc ${root}/proc
+${prefix}mount -t sysfs sys ${root}/sys
 
-${prefix}chroot $1
+${prefix}chroot ${root} $@
 
-${prefix}umount ${1}/dev
-${prefix}umount ${1}/proc
-${prefix}umount ${1}/sys
+${prefix}umount ${root}/sys
+${prefix}umount ${root}/proc
+${prefix}umount ${root}/dev/pts
+${prefix}umount ${root}/dev

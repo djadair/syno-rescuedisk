@@ -22,6 +22,13 @@ Live CD images will not work properly.
 legacy bios mode and ancient systems can not boot GPT at all.  That said EFI boot with GPT is
 likely the safest choice for future systems.
 
+**WARNING:**  This repository contains a Makefile which is used to test the live ISO build.
+Unless you are trying to build a live ISO file that is likely not what you want to use, while
+it *can* also create a USB device it makes lots of default assumptions which may not match
+your use case.  Please read this whole file and examine what the Makefile does before just
+typeing "make".
+
+
 ## Setup
 
 **NOTE:** This has only been tested when run on Ubuntu Xenial and Bionic systems installed from the
@@ -188,6 +195,58 @@ sudo ./bin/rootshell ./rootfs
 be likely to try to use.
 
 
+### Live ISO build
+The installed image can be used as the souce for a CASPER based Live DVD hybrid ISO image.
+The majority of the work is done by the conf files ( install syslinux, isolinux ) and the
+hooks/enabled/native-85-isoprep.sh script which creates the boot menus and images required
+to construct the hybrid ISO.
+
+The final construction is done by running:
+```
+./bin/mkiso.sh rootfs
+```
+
+Which copies the syslinux/isolinux bits out of the image, generates a squashfs copy of rootfs
+and then runs xorisso to create the ISO image called "live.iso" in the top directory.
+
+***WARNING:*** Make sure you do this AFTER running setup-passwords or configure an admin
+account in some other way or you will not be able to log in to resulting live image.
+
+For simplicity you can also use the make file to create a live image using loop devices
+if you do not require USB support.
+```
+make CONF=conf/bionic-desktop iso; make umount
+```
+
+The full set of Makefile Parameters:
+
+| Parameter | Use | Default |
+| :--- | :--- | :--- |
+| DEVICE | Block device to install | Use loop device |
+| IMAGE  | Loop device backing file | scratch/disk.img |
+| IMAGE_SIZE | Loop device size | 6500M |
+| CONF | Multistrap conf | conf/bionic-server.conf |
+| PROXY | apt-cacher-ng proxy URL | Default from /etc/apt or none |
+
+Makefile Targets:
+
+| Target  | Use |
+| :--- | :--- |
+| all  | Fake default target does nothing |
+| diskonly | Build bootable disk image |
+| iso | Build disk image and Live ISO |
+| umount | Un-mount build FS, not done by default |
+| clean | umount and remove working files |
+| distclean | clean and remove live.iso |
+| testbios | boot disk image with qemu (bios) |
+| testefi  | boot disk image with qemu (efi) |
+| testlivebios | boot live.iso with qemu (bios) |
+| testliveefi | boot live.iso with qemu (efi) |
+
+***Note:*** qemu booting can be painfully slow particulary when
+run with nested emulation e.g. from a VM.  It is more suitable
+for testing the boot loader than the whole image.
+
 
 ## Project layout
 
@@ -195,9 +254,12 @@ be likely to try to use.
 | :--- | :--- |
 | bin | Scripts to run installation |
 | conf | Config files passed to multistrap with -f |
-| hooks | Customization scripts used during multistrap process. |
-| rootfs | Mount point for disk to be installed. |
 | fake-dist | Repository used by "Programs" section. |
+| hooks | Customization scripts used during multistrap process. |
+| hooks/enabled | Soft links to hooks to use for build |
+| image | Staging directory for ISO build |
+| rootfs | Mount point for disk to be installed. |
+| scratch | Working directory for loop mounted rootfs |
 
 
 ## FAQ:
@@ -213,9 +275,10 @@ selections so it may or may not be required.
 See https://help.ubuntu.com/community/Repositories/Personal for details.  If you do this you
 will either have to add your own keyring package and sign the packages or install with --no-auth.
 
-**Why not a Live ISO ?**  Because I don't know how to do that without lorax.  Seriously I like
-keeping my backup data and the boot disk on the same USB drive but ISO would be ok if
-I knew how to create one.
+**Why not a Live ISO ?**  The live ISO is a handy backup because a DVD makes a good archive
+media.  For primary use I prefer keeping my backup data and the boot disk on the same USB drive
+so that I can save backups as btrfs snapshots and access them even if I loose my NAS and the
+drives.
 
 **How do I read encrypted volumes**  The synology encrypted volumes are encrypted with ecryptfs
 and may be mounted with the command:

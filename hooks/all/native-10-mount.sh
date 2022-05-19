@@ -25,6 +25,7 @@ check_path "dev"
 mount -t proc proc $dir/proc
 mount -t sysfs sys $dir/sys
 mount -o bind /dev $dir/dev
+mount -t devpts devpts $dir/dev/pts
 
 # Fixup required for /var/run to let preinst work
 [ -h $dir/var/run ] || rm -rf $dir/var/run/*

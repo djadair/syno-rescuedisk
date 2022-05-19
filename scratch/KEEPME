@@ -1,0 +1,5 @@
+This directory is used to hold the disk image when running in
+loop device mode.
+
+If your root file system does not have at least 10GB free mount more
+storage here.

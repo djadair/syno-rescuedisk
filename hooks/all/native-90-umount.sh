@@ -23,4 +23,5 @@ check_path "dev"
 
 umount $dir/proc
 umount $dir/sys
+umount $dir/dev/pts
 umount $dir/dev

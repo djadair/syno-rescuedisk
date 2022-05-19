@@ -1,0 +1,1 @@
+../all/native-30-fixupdaterc.sh

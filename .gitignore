@@ -9,3 +9,10 @@
 # Skip rootfs
 /rootfs/**
 !/rootfs/MUSTMOUNT
+# Skip scratch
+/scratch/**
+!/scratch/KEEPME
+# Skip live.iso
+live.iso
+# Skip image, script will create
+/image/**

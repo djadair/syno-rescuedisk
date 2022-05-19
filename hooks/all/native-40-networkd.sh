@@ -26,11 +26,11 @@ check_path() {
 
 
 conf_path="etc/systemd/network"
-check_path "etc/systemd/network"
+check_path ${conf_path}
 
 chroot ${dir} systemctl enable systemd-networkd
 
-cat <<EOF > ${dir}/${conf_path}/20-dhcp-network
+cat <<EOF > ${dir}/${conf_path}/20-dhcp.network
 # Set up all interfaces for dhcp.
 # See man systemd.network if you need something more complex
 # NOTE: Newer systemd versions may have options not available here.

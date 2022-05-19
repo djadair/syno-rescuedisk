@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # Check for device size and choose large or small GPT
 dev=$1
@@ -5,11 +6,19 @@ if [ -z "${dev}" ] ; then
     echo "You must specify a device"
     exit 1
 fi
+if [ "${dev}" = "-h" -o "${dev}" = "--help" ] ; then
+    echo "syntax: $0 <dev>"
+    echo
+    echo "This is a wrapper around sfconv.sh, you may want"
+    echo "to run that command directly."
+    echo
+fi
 t=$( mount | grep $dev)
 if [ -n "$t" ] ; then
     echo "$dev appears to be in use"
     echo $t
-    fail "Can not partition active drive"
+    echo "Can not partition active drive"
+    exit 1
 fi
 
 
