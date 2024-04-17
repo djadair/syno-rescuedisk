@@ -1,3 +1,12 @@
+Current issues:
+ - 22.04 renamed btrfs-tools to btrfs-progs. Breaks host setup.
+ - Remote destop support different.
+     - Modified full setup to detect bionic -vs- jammy.
+ - Proxy setup. Only direct IP/fqdn works with http_proxy.
+     - added disclaimer. Not sure if solution practical.
+ - Password copy does not work 22 -> 18
+     - Punted and prompt for password
+
 btrfs filesystem label /dev/sdb USB_BTRFS_DATA
 e2label /dev/sdc1  USB_ROOT
 
@@ -39,9 +48,14 @@ cp /etc/resolv.conf rootfs/run/resolvconf/resolv.conf
 
 # stuff installed
 
+# For efficient use need to point at local apt proxy.
+https://help.ubuntu.com/community/Apt-Cacher%20NG#Client_setup
+Only direct mode is working.  NOTE: below doesnt work due to quotes.
+use fqdn or ip.
+echo 'Acquire::http { Proxy "http://${proxy_server}:3142"; }' | sudo tee -a /etc/apt/apt.conf.d/proxy
 
+Bionic had flaky xrdp.  Had to use vnc/mate.
 # after host install required two changes:
-sudo sudo usermod -a -G ssl-cert xrdp
 sudo usermod -a -G ssl-cert xrdp
 echo "mate-session" > ~/.xsession
 
@@ -50,6 +64,22 @@ also
 vncpasswd
 After starting remote desktop session
 vncpasswd -f ~/.vnc/sesman_devvm_passwd\:10
+
+Jammy (22.04) Has a fully working xrdp so vnc and mate
+no longer required.  For use from windows host with clipboard
+support it is easier to just use remote desktop.
+
+sudo usermod -a -G ssl-cert xrdp
+cat << EOF > ~/.xsessionrc
+export GNOME_SHELL_SESSION_MODE=ubuntu
+export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+export XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg
+EOF
+systemctl restart xrdp
+
+BIG NOTE:  ONLY WORKS IF USER IS NOT LOGGED IN ON CONSOLE.  To
+stop:
+systemctl set-default multi-user.target
 
 Mounting encrypted volume from syno.  Requires copy or RW snapshot.
 mount -t ecryptfs -o ecryptfs_cipher=aes,ecryptfs_key_bytes=32,ecryptfs_passthrough=no
@@ -69,78 +99,5 @@ extlinux.conf ( usb ), isolinux.cfg ( ISO ).
 3) An initrd capable of making the read-only root appear as RW by performing
 a union mount with either ram or user specified persistent media.
 
-15 years ago this was simple to do but complex to maintain because it had
-a huge pile of scripts and configuration files.
-
-Sadly it  has been "simplified" so much over the years that 15 years after it
-was simple Ubuntu still has "generic Live image" on the to-do list. Layer
-on layer on layer of tools and still normal user only has two choices:
-- Create a modified install disk.
-- Manually patch and hack an existing disk.
-
-Seems like what has been accomplished is making the complex configuration
-impossible to find.
-
-Redhat has a simple tool ( lorax ) to handle a complex manipulation of the
-initrd and runtime environment.  It is only a little more complex than
-livecd-creator it replaced but that is forgiveable because it no longer
-requires a magic boot.iso base.  However for the most part that depends on
-using the tool end-to-end and generating the image from a kickstart script
-so it is entirely yum / kickstart dependent.
-
-Ubuntu has a much simpler way to create a live-compatible initrd ( casper ).
-This looks great, just install it and any mkinitramfs image can have live
-support.  Can't find the other shoe though -- there is no obvious way to
-use it for anything but install disks.
-
-
-More searching required.  So far promising areas are:
-
-casper -- definately want this.
-syslinux / isolinux -- likely required.
-Debian live https://salsa.debian.org/live-team/live-build/-/blob/master/scripts/build/binary_iso
-xorisso  -- seems most newer ISO generators use this instead of mkisofs
-livecd-rootfs -- appears to be ubuntu version of debian live-build
-https://git.launchpad.net/livecd-rootfs
-live-wrapper -- debootsrap wrapper for live VM images (lwr).
- - another all-in-one but maybe ditch multistrap and just use.
- - vmdebbootstrap http://manpages.ubuntu.com/manpages/xenial/man8/vmdebootstrap.8.html
- - Promising if copy of root squashfs'd to <workdir>/live
- https://salsa.debian.org/live-team/live-wrapper/-/blob/master/doc/quickstart.rst
- Directory listing of /live/
-filesystem.packages
-filesystem.packages-remove
-filesystem.squashfs
-initrd.img
-vmlinuz
-
-Gaa but it is still dowloading the distro CDROM image files -- ironically only for
-isolinux_filenames = ['./isolinux.cfg', './stdmenu.cfg', './splash.png']
-
-also relies on qemu which is a pity.
-
-mksquashfs -ef boot  ???
-
-lwr -d bionic -m http://us.archive.ubuntu.com/ubuntu --apt-mirror http://us.archive.ubuntu.com/ubuntu --isolinux --grub
-
-Sadly even with image specified it must be in base repo :(
-
-. /mnt/devel/dev/live-install/testenv/bin/activate
-lwr -d bionic -m http://us.archive.ubuntu.com/ubuntu --apt-mirror http://us.archive.ubuntu.com/ubuntu --isolinux --grub --kernel linux-image-generic --cdir ./test --customise ./noop.sh --no-installer 
-
-likely dead end -- does not generate casper images.  Seems to use a different system which
-would be fine but attempt to install the bits fails for no obvious reason and I can't make
-it stop deleting the in-process image to find out why:
-E: Unable to locate package live-boot
-E: Unable to locate package live-boot-initramfs-tools
-
-
-in rootfs
-apt install syslinux syslinux-efi isolinux syslinux-utils
-
-1980  mkdir iso
- 1981  cd iso
- 1982  mkdir isolinux
- 1983  cd isolinux/
- 1984  cp ../../rootfs/usr/lib/syslinux/modules/bios/* .
- 1985  cp ../../rootfs/usr/lib/ISOLINUX/isolinux.bin .
+If you wonder why it is being done the way it is instead of fancy tool "X"
+see history of this file.  Probably been tried and failed.

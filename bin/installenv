@@ -1,16 +1,16 @@
 #!/bin//bash
 
 if [ ! "$1" = "install" ] ; then
-   echo "syntax: sudo $0 install"
+   echo "syntax: $0 install"
    echo
    echo "This script will install all of the packages required"
    echo "to run the usbrootfs generation."
    echo
-   echo "It has been most recently tested on bionic [ 18.04 ] but"
-   echo "should still work on xenial [ 16.04 ] as well."
+   echo "It has been most recently tested on jammy [ 22.04 ] but should"
+   echo "still work on bionic [ 18.04 ] and xenial [ 16.04 ] as well."
    echo
-   echo "A slightly modified version of multistrap is required too"
-   echo "you can run the version in this directory or if you are ok"
+   echo "A slightly modified version of multistrap is required too."
+   echo "You can run the version in this directory or if you are ok"
    echo "with unsigned packages install the deb in the fake-dist repo"
    echo
    echo "Note: fake-dist only works because multistrap is NOT included"
@@ -20,27 +20,48 @@ if [ ! "$1" = "install" ] ; then
    exit 0
 fi
 
-if [ !  "$(id -u)" = "0" ]; then
-    echo "This script must be run as root, use:"
-    echo "sudo $0 install"
-    exit 1
+# Locate distribution
+. /etc/lsb-release
+
+# Swapped from previous behavior to run sudo internally
+# so user account files can be created.
+APT="apt-get -y"
+if [ "$(id -u)" = "0" ]; then
+    if [ -n "$2" -a x"$2" = x"full" ] ; then
+	echo "Full mode installation must run as user not root"
+	echo "  $0 install full"
+	exit 1
+    fi
+else
+    APT="sudo apt-get -y"
 fi
 
-
 # For image creation mandatory
-apt install multistrap gparted debconf-utils
-apt install btrfs-tools
-apt install ecryptfs-utils
+${APT} install multistrap gparted debconf-utils
+${APT} install ecryptfs-utils
+case "${DISTRIB_CODENAME}" in
+	"bionic")
+	    ;& # fall through
+	"xenial")
+	    ${APT} install btrfs-tools  # bionic or earlier
+	    ;;
+	*)
+	    ${APT} install btrfs-progs  # 22.04 or later
+	    ;;
+esac
 
 # For image creation highly useful
-apt install lsscsi
-apt install scsitools net-tools
+${APT} install lsscsi
+${APT} install scsitools net-tools
+
+# For image creation ISO only
+${APT} install xorriso
 
 # For dpkg creation ( also requires disabling apparmor on /usr/bin/man )
-apt install dpkg-dev debhelper intltool po4a apparmor-utils
+${APT} install dpkg-dev debhelper intltool po4a apparmor-utils
 
 # Source access
-apt install git
+${APT} install git
 
 #
 # The following are largely personal preferences.  If you don't
@@ -50,23 +71,61 @@ apt install git
 if [ -n "$2" -a x"$2" = x"full" ] ; then
     
     # to reach source repo.
-    apt install ssh nfs-common
+    ${APT} install ssh nfs-common
 
     # Utility stuff ( not part of image gen )
-    apt install kexec-tools
-    apt install emacs vim
+    ${APT} install kexec-tools dmidecode
+    ${APT} install emacs vim
+
+    # For remote desktop
+    ${APT} install xrdp
+    sudo usermod -a -G ssl-cert xrdp
 
     # For VMWare resizable desktop
-    apt install open-vm-tools
+    if (sudo dmidecode | grep Manufacturer | grep -q VMware) ; then
+	${APT} install open-vm-tools
+    fi
 
-    # To get VNC to work use xrdp and swap to mate desktop.
-    # Note:  clipboard requires vncconfig.
-    # Note:  Start session with xrdp then update password and log in
-    #        using a vnc client and run vncconfig to get clipboard.
-    apt install xrdp vnc4server
-    apt install mate-core mate-desktop-environment mate-notification-daemon
-    apt install gnome-icon-theme
-
-    echo "mate-session" > ~/.xsession
+    case "${DISTRIB_CODENAME}" in
+	"bionic")
+	    ;& # fall through
+	"xenial")
+	    echo "Setting up VNC/Mate"
+	    # To get VNC to work use xrdp and swap to mate desktop.
+	    # Note:  clipboard requires vncconfig.
+	    # Note:  Start session with xrdp then update password and log in
+	    #        using a vnc client and run vncconfig to get clipboard.
+	    ${APT} install vnc4server
+	    ${APT} install mate-core mate-desktop-environment mate-notification-daemon
+	    ${APT} install gnome-icon-theme
+	    echo "mate-session" | sudo tee ~/.xsession >/dev/null
+	    echo "mate-session" > ~/.xsession
+	    ;;
+	"jammy")
+	    echo "Setting up xdg session"
+	    # 22.04 works properly but following needs to be in end
+	    # user home rather than root.
+	    cat << EOF > ~/.xsessionrc
+export GNOME_SHELL_SESSION_MODE=ubuntu
+export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+export XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg
+EOF
+	    ;;
+	*)
+	    echo "Could not identify release"
+	    echo "Set up remote desktop manually"
+	;;
+    esac
 
 fi
+
+echo
+echo
+echo "Don't forget to set proxy in /etc/apt/apt.conf.d/proxy"
+echo "multistrap will not auto-detect a DNS or avahi defined proxy"
+echo "so you need to explicity specify one e.g.:"
+echo 'echo '\''Acquire::http { Proxy "http://example.com:3142"; }'\'' > /etc/apt/apt.conf.d/proxy'
+echo
+echo "Of course you don't need a proxy. Installs just run a lot faster"
+echo "if you use apt-cacher-ng"
+echo

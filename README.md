@@ -181,8 +181,10 @@ sudo ./bin/multistrap -f conf/bionic-server -d ./rootfs
 After the installation completes it is **VERY IMPORTANT** that you set up a user account and passwords for the
 installed system.  To copy your current account use the `setup-passwords` script:
 ```
-sudo ./bin/setup-passwords ./rootfs
+./bin/setup-passwords ./rootfs
 ```
+**NOTE:** The bionic release did not support the now default "yescrypt" password format.  If your local
+account uses a yescrypt password it can not be copied and you will be prompted to enter a password.
 
 ### Adjusting the install
 If you want to test the installed system it has to have the proc, sys, and dev filesystems mounted.  To simplify
