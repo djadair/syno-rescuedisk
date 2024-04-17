@@ -72,7 +72,7 @@ endif
 # Test boot
 .PHONY : testbios testefi testhd
 all:
-	$(SU) env | grep proxy
+	$(SU) env | grep proxy || true
 	@echo "Use diskonly or iso target to build"
 
 # This must be deferred if we need it it is not set yet.
