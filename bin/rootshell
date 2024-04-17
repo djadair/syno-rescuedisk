@@ -24,6 +24,7 @@ else
 fi
 
 ${prefix}mount -o bind /dev ${root}/dev
+${prefix}mount -o bind /run/systemd/resolve ${root}/run/systemd/resolve
 ${prefix}mount -t devpts devpts ${root}/dev/pts
 ${prefix}mount -t proc proc ${root}/proc
 ${prefix}mount -t sysfs sys ${root}/sys
@@ -33,4 +34,5 @@ ${prefix}chroot ${root} $@
 ${prefix}umount ${root}/sys
 ${prefix}umount ${root}/proc
 ${prefix}umount ${root}/dev/pts
+${prefix}umount ${root}/run/systemd/resolve
 ${prefix}umount ${root}/dev

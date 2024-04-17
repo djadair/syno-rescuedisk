@@ -32,11 +32,11 @@ typeing "make".
 ## Setup
 
 **NOTE:** This has only been tested when run on Ubuntu Xenial and Bionic systems installed from the
-full system Live image.  Most parts should work on any system but you will have to install
-all of the tools manually.  It may be particularly challenging without a host that supports apt
-natively.
+full system Live image or Jammy installed from the Canonical install disk.  Most parts should work
+on any system but you will have to install all of the tools manually.  It may be particularly
+challenging without a host that supports apt natively.
 
-From a fresh install or live image of Ubuntu Bionic you can install the pre-requisites by running:
+From a fresh install or live image of Ubuntu Bionic/Jammy you can install the pre-requisites by running:
 ```
 sudo ./bin/installenv install
 ```
